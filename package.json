@@ -18,6 +18,7 @@
     "ot-fuzzer": "^1.0.0"
   },
   "scripts": {
+    "tdd": "npm test -- --watch",
     "test": "mocha --require 'coffee-script/register' 'test/**'"
   },
   "repository": {
