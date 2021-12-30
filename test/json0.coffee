@@ -482,6 +482,9 @@ genTests = (type) ->
     it 'moves presence indirectly moved by li', ->
       assert.deepEqual {p: ['x', 3], v: 0}, type.transformPresence {p: ['x', 2], v: 0}, [{p: ['x', 0], li: 'foo'}]
 
+    it 'moves presence indirectly moved by ld', ->
+      assert.deepEqual {p: ['x', 1], v: 0}, type.transformPresence {p: ['x', 2], v: 0}, [{p: ['x', 0], ld: 'foo'}]
+
     it 'moves deep presence moved by a higher li', ->
       assert.deepEqual {p: ['x', 3, 'y'], v: 0}, type.transformPresence {p: ['x', 2, 'y'], v: 0}, [{p: ['x', 1], li: 'foo'}]
 
