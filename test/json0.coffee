@@ -452,6 +452,16 @@ genTests = (type) ->
       assert.throws -> type.apply {x:'a'}, [{p:['x'], oi: 'c', od: 'b'}]
       assert.throws -> type.apply {x:'a'}, [{p:['x'], oi: 'b'}]
 
+    it 'disallows reassignment of special JS property names', ->
+      assert.throws -> type.apply {x:'a'}, [{p:['__proto__'], oi:'oops'}]
+      assert.throws -> type.apply {x:{y:'a'}}, [{p:['x', '__proto__'], oi:'oops'}]
+      assert.throws -> type.apply {x:'a'}, [{p:['constructor'], oi:'oops'}]
+      assert.throws -> type.apply {x:{y:'a'}}, [{p:['x', 'constructor'], oi:'oops'}]
+
+    it 'disallows modification of prototype property objects', ->
+      obj = {x:'a'}
+      assert.throws -> type.apply obj, [{p:['toString', 'name'], oi:'oops'}]
+
     it 'throws when the insertion key is a number', ->
       assert.throws -> type.apply {'1':'a'}, [{p:[2], oi: 'a'}]
 
