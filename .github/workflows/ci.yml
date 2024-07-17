@@ -28,3 +28,5 @@ jobs:
     - name: Release
       if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
       run: ./release.sh
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
