@@ -447,6 +447,26 @@ genTests = (type) ->
       assert.deepEqual [], type.transform [{p:['k'], od:'x'}], [{p:['k'], od:'x'}], 'left'
       assert.deepEqual [], type.transform [{p:['k'], od:'x'}], [{p:['k'], od:'x'}], 'right'
 
+    it 'An attempt to re-add a key with an identical string becomes a no-op', ->
+      assert.deepEqual [], type.transform [{p:['k'], oi:'x'}], [{p:['k'], oi:'x'}], 'left'
+      assert.deepEqual [], type.transform [{p:['k'], oi:'x'}], [{p:['k'], oi:'x'}], 'right'
+
+    it 'An attempt to re-replace a key with an identical string becomes a no-op', ->
+      assert.deepEqual [], type.transform [{p:['k'], oi:'x', od: 'a'}], [{p:['k'], oi:'x', od: 'a'}], 'left'
+      assert.deepEqual [], type.transform [{p:['k'], oi:'x', od: 'a'}], [{p:['k'], oi:'x', od: 'a'}], 'right'
+
+    it 'An attempt to re-replace a key with an identical string becomes a no-op', ->
+      assert.deepEqual [], type.transform [{p:['k'], oi:'x', od: 'a'}], [{p:['k'], oi:'x', od: 'b'}], 'left'
+      assert.deepEqual [], type.transform [{p:['k'], oi:'x', od: 'a'}], [{p:['k'], oi:'x', od: 'b'}], 'right'
+
+    it 'An attempt to re-add a key with an identical object becomes a no-op', ->
+      assert.deepEqual [], type.transform [{p:['k'], oi:{}}], [{p:['k'], oi:{}}], 'left'
+      assert.deepEqual [], type.transform [{p:['k'], oi:{}}], [{p:['k'], oi:{}}], 'right'
+
+    it 'An attempt to re-replace a key with an identical object becomes a no-op', ->
+      assert.deepEqual [], type.transform [{p:['k'], oi:{}, od: 'a'}], [{p:['k'], oi:{}, od: 'a'}], 'left'
+      assert.deepEqual [], type.transform [{p:['k'], oi:{}, od: 'a'}], [{p:['k'], oi:{}, od: 'a'}], 'right'
+
     it 'throws when the deletion target does not match', ->
       assert.throws -> type.apply {x:'a'}, [{p:['x'], od: 'b'}]
       assert.throws -> type.apply {x:'a'}, [{p:['x'], oi: 'c', od: 'b'}]
