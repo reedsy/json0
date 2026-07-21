@@ -279,10 +279,8 @@ genTests = (type) ->
       it 'diffs nested objects along their path', ->
         assert.deepEqual [{p: ['a', 'b'], oi: 2}], type.diff {a: {}}, {a: {b: 2}}
 
-      it 'diffs a changed Date with od + oi', ->
-        a = new Date('2020-01-01')
-        b = new Date('2021-01-01')
-        assert.deepEqual [{p: ['d'], od: a, oi: b}], type.diff {d: a}, {d: b}
+      it 'diffs a changed array with od + oi', ->
+        assert.deepEqual [{p: ['x'], od: [1, 2], oi: [3]}], type.diff {x: [1, 2]}, {x: [3]}
 
       it 'diffs a value changing between object and non-object with od + oi', ->
         assert.deepEqual [{p: ['x'], od: 5, oi: {}}], type.diff {x: 5}, {x: {}}
