@@ -251,6 +251,40 @@ genTests = (type) ->
 
         assert.throws -> type.invertWithDoc [{p: ['foo'], t: 'not-invertible', o: [{increment: 1}]}], {foo: 5}
 
+    describe '#diff()', ->
+      roundTrips = (before, after) ->
+        assert.deepEqual after, type.apply (JSON.parse JSON.stringify before), type.diff before, after
+
+      it 'returns a no-op for equal values', ->
+        assert.deepEqual [], type.diff {a: 1}, {a: 1}
+
+      it 'diffs an added key with oi', ->
+        assert.deepEqual [{p: ['b'], oi: 2}], type.diff {a: 1}, {a: 1, b: 2}
+
+      it 'diffs a removed key with od', ->
+        assert.deepEqual [{p: ['b'], od: 2}], type.diff {a: 1, b: 2}, {a: 1}
+
+      it 'diffs a renamed key with od + oi', ->
+        assert.deepEqual [{p: ['title'], od: 'x'}, {p: ['heading'], oi: 'x'}], type.diff {title: 'x'}, {heading: 'x'}
+
+      it 'diffs a changed non-string value with od + oi', ->
+        assert.deepEqual [{p: ['year'], od: 2020, oi: '2020'}], type.diff {year: 2020}, {year: '2020'}
+
+      it 'diffs a string prefix insertion with si', ->
+        assert.deepEqual [{p: ['s', 0], si: 'PREFIX '}], type.diff {s: 'foobar'}, {s: 'PREFIX foobar'}
+
+      it 'diffs a string middle change with sd + si', ->
+        assert.deepEqual [{p: ['s', 3], sd: 'X'}, {p: ['s', 3], si: 'Y'}], type.diff {s: 'fooXbar'}, {s: 'fooYbar'}
+
+      it 'diffs nested objects along their path', ->
+        assert.deepEqual [{p: ['a', 'b'], oi: 2}], type.diff {a: {}}, {a: {b: 2}}
+
+      it 'round-trips via apply', ->
+        roundTrips {title: 'Original'}, {heading: 'PREFIX Original'}
+        roundTrips {s: 'fooXbar'}, {s: 'fooYbar'}
+        roundTrips {year: 2020, keep: true}, {year: '2020', keep: true}
+        roundTrips {a: {b: 'foo'}}, {a: {b: 'foobar'}}
+
     it 'moves ops on a moved element with the element', ->
       assert.deepEqual [{p:[10], ld:'x'}], type.transform [{p:[4], ld:'x'}], [{p:[4], lm:10}], 'left'
       assert.deepEqual [{p:[10, 1], si:'a'}], type.transform [{p:[4, 1], si:'a'}], [{p:[4], lm:10}], 'left'
