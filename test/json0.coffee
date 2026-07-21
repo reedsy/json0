@@ -288,6 +288,10 @@ genTests = (type) ->
         assert.deepEqual [{p: ['x'], od: 5, oi: {}}], type.diff {x: 5}, {x: {}}
         assert.deepEqual [{p: ['x'], od: {}, oi: 5}], type.diff {x: {}}, {x: 5}
 
+      it 'diffs only own keys, ignoring inherited enumerable properties', ->
+        before = Object.create {inherited: 'x'}
+        assert.deepEqual [{p: ['a', 'b'], oi: 'new'}], type.diff {a: before}, {a: {b: 'new'}}
+
       it 'round-trips via apply', ->
         roundTrips {title: 'Original'}, {heading: 'PREFIX Original'}
         roundTrips {s: 'fooXbar'}, {s: 'fooYbar'}
