@@ -2,7 +2,7 @@ import * as sharedb from 'sharedb';
 type BaseType = (typeof sharedb)['types']['map'][string];
 
 export interface Diffable {
-  diff(before: any, after: any): any[];
+  diff(before: any, after: any): any
   isDoc?(value: any): boolean
 }
 
