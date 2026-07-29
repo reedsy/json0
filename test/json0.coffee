@@ -430,8 +430,26 @@ genTests = (type) ->
           type.diff {x: {mark: true, v: 1}}, {x: 5}
 
     describe 'lists', ->
-      it 'diffs a changed array with od + oi', ->
-        assert.deepEqual [{p: ['x'], od: [1, 2], oi: [3]}], type.diff {x: [1, 2]}, {x: [3]}
+      it 'inserts appended elements with li', ->
+        assert.deepEqual [{p: ['x', 2], li: 3}], type.diff {x: [1, 2]}, {x: [1, 2, 3]}
+
+      it 'removes dropped elements with ld', ->
+        assert.deepEqual [{p: ['x', 1], ld: 2}], type.diff {x: [1, 2, 3]}, {x: [1, 3]}
+
+      it 'leaves unchanged neighbours alone when an element is replaced', ->
+        assert.deepEqual [{p: ['x', 1], ld: 2}, {p: ['x', 1], li: 9}],
+          type.diff {x: [1, 2, 3]}, {x: [1, 9, 3]}
+
+      it 'expresses a relocated element as lm', ->
+        assert.deepEqual [{p: ['x', 2], lm: 1}], type.diff {x: [0, 1, 2]}, {x: [0, 2, 1]}
+
+      it 'expresses a moved run as one lm per element', ->
+        assert.deepEqual [{p: ['x', 1], lm: 0}, {p: ['x', 2], lm: 1}],
+          type.diff {x: [1, 2, 3]}, {x: [2, 3, 1]}
+
+      it 'diffs a changed object element with ld + li', ->
+        assert.deepEqual [{p: ['x', 1], ld: {v: 1}}, {p: ['x', 1], li: {v: 2}}],
+          type.diff {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {v: 2}]}
 
     describe 'scalars and type changes', ->
       it 'diffs a changed non-string value with od + oi', ->
@@ -446,6 +464,12 @@ genTests = (type) ->
       roundTrips {s: 'fooXbar'}, {s: 'fooYbar'}
       roundTrips {year: 2020, keep: true}, {year: '2020', keep: true}
       roundTrips {a: {b: 'foo'}}, {a: {b: 'foobar'}}
+
+    it 'round-trips random array reshapes via apply', ->
+      # array of 0-7 elements with values 0-5 --> duplicates values are common to stress move/index logic
+      randomArray = -> (Math.floor(Math.random() * 6) for _ in [0...Math.floor(Math.random() * 8)])
+      for _ in [0...2000]
+        roundTrips {x: randomArray()}, {x: randomArray()}
 
   describe 'object', ->
     it 'passes sanity checks', ->
