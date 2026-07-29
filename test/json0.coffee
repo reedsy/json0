@@ -444,8 +444,12 @@ genTests = (type) ->
         assert.deepEqual [{p: ['x', 2], lm: 1}], type.diff {x: [0, 1, 2]}, {x: [0, 2, 1]}
 
       it 'expresses a moved run as one lm per element', ->
-        assert.deepEqual [{p: ['x', 1], lm: 0}, {p: ['x', 2], lm: 1}],
-          type.diff {x: [1, 2, 3]}, {x: [2, 3, 1]}
+        assert.deepEqual [{p: ['x', 2], lm: 0}, {p: ['x', 3], lm: 1}],
+          type.diff {x: [1, 2, 3, 4]}, {x: [3, 4, 1, 2]}
+
+      it 'moves the smaller side: one element to the far end, not the whole prefix', ->
+        assert.deepEqual [{p: ['x', 0], lm: 4}],
+          type.diff {x: [9, 1, 2, 3, 4]}, {x: [1, 2, 3, 4, 9]}
 
       it 'diffs a changed object element with ld + li', ->
         assert.deepEqual [{p: ['x', 1], ld: {v: 1}}, {p: ['x', 1], li: {v: 2}}],
