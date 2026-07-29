@@ -251,65 +251,6 @@ genTests = (type) ->
 
         assert.throws -> type.invertWithDoc [{p: ['foo'], t: 'not-invertible', o: [{increment: 1}]}], {foo: 5}
 
-    describe '#diff()', ->
-      roundTrips = (before, after) ->
-        assert.deepEqual after, type.apply (JSON.parse JSON.stringify before), type.diff before, after
-
-      before ->
-        type.registerSubtype
-          name: 'fake'
-          isDoc: (x) -> x?.mark is true
-          diff: (before, after) ->
-            if before.v is after.v then [] else [{fake: [before.v, after.v]}]
-
-      it 'returns a no-op for equal values', ->
-        assert.deepEqual [], type.diff {a: 1}, {a: 1}
-
-      it 'diffs an added key with oi', ->
-        assert.deepEqual [{p: ['b'], oi: 2}], type.diff {a: 1}, {a: 1, b: 2}
-
-      it 'diffs a removed key with od', ->
-        assert.deepEqual [{p: ['b'], od: 2}], type.diff {a: 1, b: 2}, {a: 1}
-
-      it 'diffs a renamed key with od + oi', ->
-        assert.deepEqual [{p: ['title'], od: 'x'}, {p: ['heading'], oi: 'x'}], type.diff {title: 'x'}, {heading: 'x'}
-
-      it 'diffs a changed non-string value with od + oi', ->
-        assert.deepEqual [{p: ['year'], od: 2020, oi: '2020'}], type.diff {year: 2020}, {year: '2020'}
-
-      it 'delegates to the owning subtype, wrapping its op at the path', ->
-        assert.deepEqual [{p: ['x'], t: 'fake', o: [{fake: [1, 2]}]}],
-          type.diff {x: {mark: true, v: 1}}, {x: {mark: true, v: 2}}
-
-      it 'drops the component when the owning subtype produces an empty op', ->
-        # although doc objects differ the subtype only diffs v, so its op is empty
-        assert.deepEqual [],
-          type.diff {x: {mark: true, v: 1, note: 'a'}}, {x: {mark: true, v: 1, note: 'b'}}
-
-      it 'falls back to od/oi when only one side is owned by the subtype', ->
-        assert.deepEqual [{p: ['x'], od: {mark: true, v: 1}, oi: 5}],
-          type.diff {x: {mark: true, v: 1}}, {x: 5}
-
-      it 'diffs nested objects along their path', ->
-        assert.deepEqual [{p: ['a', 'b'], oi: 2}], type.diff {a: {}}, {a: {b: 2}}
-
-      it 'diffs a changed array with od + oi', ->
-        assert.deepEqual [{p: ['x'], od: [1, 2], oi: [3]}], type.diff {x: [1, 2]}, {x: [3]}
-
-      it 'diffs a value changing between object and non-object with od + oi', ->
-        assert.deepEqual [{p: ['x'], od: 5, oi: {}}], type.diff {x: 5}, {x: {}}
-        assert.deepEqual [{p: ['x'], od: {}, oi: 5}], type.diff {x: {}}, {x: 5}
-
-      it 'diffs only own keys, ignoring inherited enumerable properties', ->
-        before = Object.create {inherited: 'x'}
-        assert.deepEqual [{p: ['a', 'b'], oi: 'new'}], type.diff {a: before}, {a: {b: 'new'}}
-
-      it 'round-trips via apply', ->
-        roundTrips {title: 'Original'}, {heading: 'PREFIX Original'}
-        roundTrips {s: 'fooXbar'}, {s: 'fooYbar'}
-        roundTrips {year: 2020, keep: true}, {year: '2020', keep: true}
-        roundTrips {a: {b: 'foo'}}, {a: {b: 'foobar'}}
-
     it 'moves ops on a moved element with the element', ->
       assert.deepEqual [{p:[10], ld:'x'}], type.transform [{p:[4], ld:'x'}], [{p:[4], lm:10}], 'left'
       assert.deepEqual [{p:[10, 1], si:'a'}], type.transform [{p:[4, 1], si:'a'}], [{p:[4], lm:10}], 'left'
@@ -442,6 +383,69 @@ genTests = (type) ->
       assert.deepEqual (li 3), xf (li 2), (lm 2, 1), 'left'
       assert.deepEqual (li 3), xf (li 3), (lm 2, 1), 'left'
 
+
+  describe '#diff()', ->
+    roundTrips = (before, after) ->
+      assert.deepEqual after, type.apply (JSON.parse JSON.stringify before), type.diff before, after
+
+    before ->
+      type.registerSubtype
+        name: 'fake'
+        isDoc: (x) -> x?.mark is true
+        diff: (before, after) ->
+          if before.v is after.v then [] else [{fake: [before.v, after.v]}]
+
+    it 'returns a no-op for equal values', ->
+      assert.deepEqual [], type.diff {a: 1}, {a: 1}
+
+    describe 'objects', ->
+      it 'diffs an added key with oi', ->
+        assert.deepEqual [{p: ['b'], oi: 2}], type.diff {a: 1}, {a: 1, b: 2}
+
+      it 'diffs a removed key with od', ->
+        assert.deepEqual [{p: ['b'], od: 2}], type.diff {a: 1, b: 2}, {a: 1}
+
+      it 'diffs a renamed key with od + oi', ->
+        assert.deepEqual [{p: ['title'], od: 'x'}, {p: ['heading'], oi: 'x'}], type.diff {title: 'x'}, {heading: 'x'}
+
+      it 'diffs nested objects along their path', ->
+        assert.deepEqual [{p: ['a', 'b'], oi: 2}], type.diff {a: {}}, {a: {b: 2}}
+
+      it 'diffs only own keys, ignoring inherited enumerable properties', ->
+        before = Object.create {inherited: 'x'}
+        assert.deepEqual [{p: ['a', 'b'], oi: 'new'}], type.diff {a: before}, {a: {b: 'new'}}
+
+    describe 'subtypes', ->
+      it 'delegates to the owning subtype, wrapping its op at the path', ->
+        assert.deepEqual [{p: ['x'], t: 'fake', o: [{fake: [1, 2]}]}],
+          type.diff {x: {mark: true, v: 1}}, {x: {mark: true, v: 2}}
+
+      it 'drops the component when the owning subtype produces an empty op', ->
+        # although doc objects differ the subtype only diffs v, so its op is empty
+        assert.deepEqual [],
+          type.diff {x: {mark: true, v: 1, note: 'a'}}, {x: {mark: true, v: 1, note: 'b'}}
+
+      it 'falls back to od/oi when only one side is owned by the subtype', ->
+        assert.deepEqual [{p: ['x'], od: {mark: true, v: 1}, oi: 5}],
+          type.diff {x: {mark: true, v: 1}}, {x: 5}
+
+    describe 'lists', ->
+      it 'diffs a changed array with od + oi', ->
+        assert.deepEqual [{p: ['x'], od: [1, 2], oi: [3]}], type.diff {x: [1, 2]}, {x: [3]}
+
+    describe 'scalars and type changes', ->
+      it 'diffs a changed non-string value with od + oi', ->
+        assert.deepEqual [{p: ['year'], od: 2020, oi: '2020'}], type.diff {year: 2020}, {year: '2020'}
+
+      it 'diffs a value changing between object and non-object with od + oi', ->
+        assert.deepEqual [{p: ['x'], od: 5, oi: {}}], type.diff {x: 5}, {x: {}}
+        assert.deepEqual [{p: ['x'], od: {}, oi: 5}], type.diff {x: {}}, {x: 5}
+
+    it 'round-trips via apply', ->
+      roundTrips {title: 'Original'}, {heading: 'PREFIX Original'}
+      roundTrips {s: 'fooXbar'}, {s: 'fooYbar'}
+      roundTrips {year: 2020, keep: true}, {year: '2020', keep: true}
+      roundTrips {a: {b: 'foo'}}, {a: {b: 'foobar'}}
 
   describe 'object', ->
     it 'passes sanity checks', ->
