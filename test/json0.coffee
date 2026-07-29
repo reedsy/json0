@@ -255,6 +255,13 @@ genTests = (type) ->
       roundTrips = (before, after) ->
         assert.deepEqual after, type.apply (JSON.parse JSON.stringify before), type.diff before, after
 
+      before ->
+        type.registerSubtype
+          name: 'fake'
+          isDoc: (x) -> x?.mark is true
+          diff: (before, after) ->
+            if before.v is after.v then [] else [{fake: [before.v, after.v]}]
+
       it 'returns a no-op for equal values', ->
         assert.deepEqual [], type.diff {a: 1}, {a: 1}
 
@@ -270,9 +277,18 @@ genTests = (type) ->
       it 'diffs a changed non-string value with od + oi', ->
         assert.deepEqual [{p: ['year'], od: 2020, oi: '2020'}], type.diff {year: 2020}, {year: '2020'}
 
-      # REVIEW shouldn't text text0 impl. detail
-      it 'diffs a string snapshot', ->
-        assert.deepEqual [{p: ['s'],o: [{p: 0, i: 'PREFIX '}], t: 'text0'}], type.diff {s: 'foobar'}, {s: 'PREFIX foobar'}
+      it 'delegates to the owning subtype, wrapping its op at the path', ->
+        assert.deepEqual [{p: ['x'], t: 'fake', o: [{fake: [1, 2]}]}],
+          type.diff {x: {mark: true, v: 1}}, {x: {mark: true, v: 2}}
+
+      it 'drops the component when the owning subtype produces an empty op', ->
+        # although doc objects differ the subtype only diffs v, so its op is empty
+        assert.deepEqual [],
+          type.diff {x: {mark: true, v: 1, note: 'a'}}, {x: {mark: true, v: 1, note: 'b'}}
+
+      it 'falls back to od/oi when only one side is owned by the subtype', ->
+        assert.deepEqual [{p: ['x'], od: {mark: true, v: 1}, oi: 5}],
+          type.diff {x: {mark: true, v: 1}}, {x: 5}
 
       it 'diffs nested objects along their path', ->
         assert.deepEqual [{p: ['a', 'b'], oi: 2}], type.diff {a: {}}, {a: {b: 2}}
