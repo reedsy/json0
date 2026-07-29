@@ -3,7 +3,7 @@ type BaseType = (typeof sharedb)['types']['map'][string];
 
 export interface Diffable {
   diff(before: any, after: any): any[];
-  isDoc?(value: any): boolean // REVIEW name
+  isDoc?(value: any): boolean
 }
 
 export type Json0Type = BaseType & Diffable & {
