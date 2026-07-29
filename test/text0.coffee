@@ -71,6 +71,28 @@ describe 'text0', ->
       assert.strictEqual 100, text0.transformCursor 104, [{d:'asdf', p:100}]
       assert.strictEqual 101, text0.transformCursor 105, [{d:'asdf', p:100}]
 
+  describe 'diff', ->
+    it 'is sane', ->
+      assert.deepEqual [], text0.diff '', ''
+      assert.deepEqual [{i:'a', p:0}], text0.diff '', 'a'
+      assert.deepEqual [{d:'a', p:0}], text0.diff 'a', ''
+      assert.deepEqual [{i:'b', p:1}], text0.diff 'a', 'ab'
+      assert.deepEqual [{d:'b', p:1}], text0.diff 'ab', 'a'
+      assert.deepEqual [{d:'b', p:1}, {i:'c', p:1}], text0.diff 'ab', 'ac'
+
+    it 'round-trips via apply', ->
+      test = (before, after) ->
+        op = text0.diff before, after
+        assert.strictEqual after, text0.apply(before, op)
+      test '', ''
+      test '', 'a'
+      test 'a', ''
+      test 'a', 'ab'
+      test 'ab', 'a'
+      test 'ab', 'ac'
+      test 'abc', 'ac'
+      test 'ac', 'abc'
+
   describe 'normalize', ->
     it 'is sane', ->
       testUnchanged = (op) -> assert.deepEqual op, text0.normalize op

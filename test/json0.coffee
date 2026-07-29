@@ -270,11 +270,9 @@ genTests = (type) ->
       it 'diffs a changed non-string value with od + oi', ->
         assert.deepEqual [{p: ['year'], od: 2020, oi: '2020'}], type.diff {year: 2020}, {year: '2020'}
 
-      it 'diffs a string prefix insertion with si', ->
-        assert.deepEqual [{p: ['s', 0], si: 'PREFIX '}], type.diff {s: 'foobar'}, {s: 'PREFIX foobar'}
-
-      it 'diffs a string middle change with sd + si', ->
-        assert.deepEqual [{p: ['s', 3], sd: 'X'}, {p: ['s', 3], si: 'Y'}], type.diff {s: 'fooXbar'}, {s: 'fooYbar'}
+      # REVIEW shouldn't text text0 impl. detail
+      it 'diffs a string snapshot', ->
+        assert.deepEqual [{p: ['s'],o: [{p: 0, i: 'PREFIX '}], t: 'text0'}], type.diff {s: 'foobar'}, {s: 'PREFIX foobar'}
 
       it 'diffs nested objects along their path', ->
         assert.deepEqual [{p: ['a', 'b'], oi: 2}], type.diff {a: {}}, {a: {b: 2}}
