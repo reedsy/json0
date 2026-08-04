@@ -426,6 +426,10 @@ genTests = (type) ->
         assert.deepEqual [{p: ['x'], t: 'fake', o: [{fake: [1, 2]}]}],
           type.diff {x: {mark: true, v: 1}}, {x: {mark: true, v: 2}}
 
+      it 'delegates to the subtype when a list element it owns is changed in place', ->
+        assert.deepEqual [{p: ['x', 0], t: 'fake', o: [{fake: [1, 2]}]}],
+          type.diff {x: [{mark: true, v: 1}]}, {x: [{mark: true, v: 2}]}
+
       it 'drops the component when the owning subtype produces an empty op', ->
         # although doc objects differ the subtype only diffs v, so its op is empty
         assert.deepEqual [],
@@ -467,9 +471,27 @@ genTests = (type) ->
         assert.deepEqual [{p: ['x', 0], lm: 4}],
           type.diff {x: [9, 1, 2, 3, 4]}, {x: [1, 2, 3, 4, 9]}
 
-      it 'diffs a changed object element with ld + li', ->
-        assert.deepEqual [{p: ['x', 1], ld: {v: 1}}, {p: ['x', 1], li: {v: 2}}],
+      it 'recurses into an object element changed in place rather than replacing it', ->
+        assert.deepEqual [{p: ['x', 1, 'v'], od: 1, oi: 2}],
           type.diff {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {v: 2}]}
+
+      it 'recurses into a list element changed in place', ->
+        assert.deepEqual [{p: ['x', 0, 1], ld: 2}, {p: ['x', 0, 1], li: 9}],
+          type.diff {x: [[1, 2]]}, {x: [[1, 9]]}
+
+      it 'replaces a changed primitive element with ld + li', ->
+        assert.deepEqual [{p: ['x', 1], ld: 2}, {p: ['x', 1], li: 9}],
+          type.diff {x: [1, 2, 3]}, {x: [1, 9, 3]}
+
+      it 'replaces a whole element when its kind changes between object and list', ->
+        assert.deepEqual [{p: ['x', 0], ld: {a: 1}}, {p: ['x', 0], li: [2]}],
+          type.diff {x: [{a: 1}]}, {x: [[2]]}
+
+      it 'replaces a batch of changed elements literally rather than pairing them', ->
+        assert.deepEqual [
+          {p: ['x', 0], ld: {v: 1}}, {p: ['x', 0], ld: {v: 2}}
+          {p: ['x', 0], li: {v: 8}}, {p: ['x', 1], li: {v: 9}}
+        ], type.diff {x: [{v: 1}, {v: 2}]}, {x: [{v: 8}, {v: 9}]}
 
     describe 'scalars and type changes', ->
       it 'diffs a changed non-string value with od + oi', ->
