@@ -87,6 +87,9 @@ genTests = (type) ->
       it 'throws when the inserted content is not a string', ->
         assert.throws -> type.apply 'a', [{p: [0], si: 1}]
 
+      it 'throws when a string insert targets a non-existent field', ->
+        assert.throws -> type.apply {}, [{p: ['nope'], si: 'foo'}]
+
     describe '#transform()', ->
       it 'splits deletes', ->
         assert.deepEqual type.transform([{p:[0], sd:'ab'}], [{p:[1], si:'x'}], 'left'), [{p:[0], sd:'a'}, {p:[1], sd:'b'}]
@@ -391,7 +394,7 @@ genTests = (type) ->
     before ->
       type.registerSubtype
         name: 'fake'
-        isDoc: (x) -> x?.mark is true
+        isOfType: (x) -> x?.mark is true
         diff: (before, after) ->
           if before.v is after.v then [] else [{fake: [before.v, after.v]}]
 
@@ -411,6 +414,9 @@ genTests = (type) ->
       it 'diffs nested objects along their path', ->
         assert.deepEqual [{p: ['a', 'b'], oi: 2}], type.diff {a: {}}, {a: {b: 2}}
 
+      it 'inserts a whole (nested) object for an added key rather than recursing', ->
+        assert.deepEqual [{p: ['a'], oi: {b: 2}}], type.diff {}, {a: {b: 2}}
+
       it 'diffs only own keys, ignoring inherited enumerable properties', ->
         before = Object.create {inherited: 'x'}
         assert.deepEqual [{p: ['a', 'b'], oi: 'new'}], type.diff {a: before}, {a: {b: 'new'}}
@@ -429,12 +435,22 @@ genTests = (type) ->
         assert.deepEqual [{p: ['x'], od: {mark: true, v: 1}, oi: 5}],
           type.diff {x: {mark: true, v: 1}}, {x: 5}
 
+      it 'diffs an undefined side to a whole-value oi/od, never a subtype op', ->
+        # isOfType rejects undefined, so no subtype claims the pair and we replace the whole value
+        assert.deepEqual [{p: ['s'], od: undefined, oi: 'foo'}], type.diff {s: undefined}, {s: 'foo'}
+        assert.deepEqual [{p: ['s'], od: 'foo', oi: undefined}], type.diff {s: 'foo'}, {s: undefined}
+
     describe 'lists', ->
       it 'inserts appended elements with li', ->
         assert.deepEqual [{p: ['x', 2], li: 3}], type.diff {x: [1, 2]}, {x: [1, 2, 3]}
 
       it 'removes dropped elements with ld', ->
         assert.deepEqual [{p: ['x', 1], ld: 2}], type.diff {x: [1, 2, 3]}, {x: [1, 3]}
+
+      it 'removes a contiguous run with one ld per element at the shifting index', ->
+        assert.deepEqual [{p: ['x', 1], ld: 2}, {p: ['x', 1], ld: 3}],
+          type.diff {x: [1, 2, 3, 4]}, {x: [1, 4]}
+        roundTrips {x: [1, 2, 3, 4]}, {x: [1, 4]}
 
       it 'leaves unchanged neighbours alone when an element is replaced', ->
         assert.deepEqual [{p: ['x', 1], ld: 2}, {p: ['x', 1], li: 9}],

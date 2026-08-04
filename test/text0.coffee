@@ -93,15 +93,15 @@ describe 'text0', ->
       test 'abc', 'ac'
       test 'ac', 'abc'
 
-  describe 'isDoc', ->
+  describe 'isOfType', ->
     it 'is sane', ->
-      assert.strictEqual true, text0.isDoc ''
-      assert.strictEqual true, text0.isDoc 'abc'
-      assert.strictEqual false, text0.isDoc null
-      assert.strictEqual false, text0.isDoc undefined
-      assert.strictEqual false, text0.isDoc 123
-      assert.strictEqual false, text0.isDoc {}
-      assert.strictEqual false, text0.isDoc []
+      assert.strictEqual true, text0.isOfType ''
+      assert.strictEqual true, text0.isOfType 'abc'
+      assert.strictEqual false, text0.isOfType null
+      assert.strictEqual false, text0.isOfType undefined
+      assert.strictEqual false, text0.isOfType 123
+      assert.strictEqual false, text0.isOfType {}
+      assert.strictEqual false, text0.isOfType []
 
   describe 'normalize', ->
     it 'is sane', ->
