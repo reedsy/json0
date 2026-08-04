@@ -391,115 +391,127 @@ genTests = (type) ->
     roundTrips = (before, after) ->
       assert.deepEqual after, type.apply (JSON.parse JSON.stringify before), type.diff before, after
 
+    # Assert the exact op, then sense-check that applying it actually reproduces `after`.
+    # structuredClone (not JSON) so that explicit `undefined` values survive the round-trip.
+    diffsTo = (before, after, expected) ->
+      op = type.diff before, after
+      assert.deepEqual expected, op
+      assert.deepEqual after, type.apply (structuredClone before), op
+
     before ->
       type.registerSubtype
         name: 'fake'
         isOfType: (x) -> x?.mark is true
         diff: (before, after) ->
           if before.v is after.v then [] else [{fake: [before.v, after.v]}]
+        apply: (doc, op) ->
+          result = structuredClone doc
+          result.v = op[op.length - 1].fake[1]
+          result
 
     it 'returns a no-op for equal values', ->
-      assert.deepEqual [], type.diff {a: 1}, {a: 1}
+      diffsTo {a: 1}, {a: 1}, []
 
     describe 'objects', ->
       it 'diffs an added key with oi', ->
-        assert.deepEqual [{p: ['b'], oi: 2}], type.diff {a: 1}, {a: 1, b: 2}
+        diffsTo {a: 1}, {a: 1, b: 2}, [{p: ['b'], oi: 2}]
 
       it 'diffs a removed key with od', ->
-        assert.deepEqual [{p: ['b'], od: 2}], type.diff {a: 1, b: 2}, {a: 1}
+        diffsTo {a: 1, b: 2}, {a: 1}, [{p: ['b'], od: 2}]
 
       it 'diffs a renamed key with od + oi', ->
-        assert.deepEqual [{p: ['title'], od: 'x'}, {p: ['heading'], oi: 'x'}], type.diff {title: 'x'}, {heading: 'x'}
+        diffsTo {title: 'x'}, {heading: 'x'}, [{p: ['title'], od: 'x'}, {p: ['heading'], oi: 'x'}]
 
       it 'diffs nested objects along their path', ->
-        assert.deepEqual [{p: ['a', 'b'], oi: 2}], type.diff {a: {}}, {a: {b: 2}}
+        diffsTo {a: {}}, {a: {b: 2}}, [{p: ['a', 'b'], oi: 2}]
 
       it 'inserts a whole (nested) object for an added key rather than recursing', ->
-        assert.deepEqual [{p: ['a'], oi: {b: 2}}], type.diff {}, {a: {b: 2}}
+        diffsTo {}, {a: {b: 2}}, [{p: ['a'], oi: {b: 2}}]
 
       it 'diffs only own keys, ignoring inherited enumerable properties', ->
         before = Object.create {inherited: 'x'}
-        assert.deepEqual [{p: ['a', 'b'], oi: 'new'}], type.diff {a: before}, {a: {b: 'new'}}
+        diffsTo {a: before}, {a: {b: 'new'}}, [{p: ['a', 'b'], oi: 'new'}]
 
     describe 'subtypes', ->
       it 'delegates to the owning subtype, wrapping its op at the path', ->
-        assert.deepEqual [{p: ['x'], t: 'fake', o: [{fake: [1, 2]}]}],
-          type.diff {x: {mark: true, v: 1}}, {x: {mark: true, v: 2}}
+        diffsTo {x: {mark: true, v: 1}}, {x: {mark: true, v: 2}},
+          [{p: ['x'], t: 'fake', o: [{fake: [1, 2]}]}]
 
       it 'delegates to the subtype when a list element it owns is changed in place', ->
-        assert.deepEqual [{p: ['x', 0], t: 'fake', o: [{fake: [1, 2]}]}],
-          type.diff {x: [{mark: true, v: 1}]}, {x: [{mark: true, v: 2}]}
+        diffsTo {x: [{mark: true, v: 1}]}, {x: [{mark: true, v: 2}]},
+          [{p: ['x', 0], t: 'fake', o: [{fake: [1, 2]}]}]
 
       it 'drops the component when the owning subtype produces an empty op', ->
-        # although doc objects differ the subtype only diffs v, so its op is empty
+        # the subtype only diffs v, so an unrelated note change yields an empty op. No round-trip:
+        # by design the op intentionally doesn't reproduce the note change.
         assert.deepEqual [],
           type.diff {x: {mark: true, v: 1, note: 'a'}}, {x: {mark: true, v: 1, note: 'b'}}
 
       it 'falls back to od/oi when only one side is owned by the subtype', ->
-        assert.deepEqual [{p: ['x'], od: {mark: true, v: 1}, oi: 5}],
-          type.diff {x: {mark: true, v: 1}}, {x: 5}
+        diffsTo {x: {mark: true, v: 1}}, {x: 5},
+          [{p: ['x'], od: {mark: true, v: 1}, oi: 5}]
 
       it 'diffs an undefined side to a whole-value oi/od, never a subtype op', ->
-        # isOfType rejects undefined, so no subtype claims the pair and we replace the whole value
+        # isOfType rejects undefined, so no subtype claims the pair and we replace the whole value.
+        # No round-trip assert here: an explicit-undefined value and an absent key aren't deep-equal,
+        # so applying the op (which deletes the key) can't reproduce the {s: undefined} input.
         assert.deepEqual [{p: ['s'], od: undefined, oi: 'foo'}], type.diff {s: undefined}, {s: 'foo'}
         assert.deepEqual [{p: ['s'], od: 'foo', oi: undefined}], type.diff {s: 'foo'}, {s: undefined}
 
     describe 'lists', ->
       it 'inserts appended elements with li', ->
-        assert.deepEqual [{p: ['x', 2], li: 3}], type.diff {x: [1, 2]}, {x: [1, 2, 3]}
+        diffsTo {x: [1, 2]}, {x: [1, 2, 3]}, [{p: ['x', 2], li: 3}]
 
       it 'removes dropped elements with ld', ->
-        assert.deepEqual [{p: ['x', 1], ld: 2}], type.diff {x: [1, 2, 3]}, {x: [1, 3]}
+        diffsTo {x: [1, 2, 3]}, {x: [1, 3]}, [{p: ['x', 1], ld: 2}]
 
       it 'removes a contiguous run with one ld per element at the shifting index', ->
-        assert.deepEqual [{p: ['x', 1], ld: 2}, {p: ['x', 1], ld: 3}],
-          type.diff {x: [1, 2, 3, 4]}, {x: [1, 4]}
-        roundTrips {x: [1, 2, 3, 4]}, {x: [1, 4]}
+        diffsTo {x: [1, 2, 3, 4]}, {x: [1, 4]},
+          [{p: ['x', 1], ld: 2}, {p: ['x', 1], ld: 3}]
 
       it 'leaves unchanged neighbours alone when an element is replaced', ->
-        assert.deepEqual [{p: ['x', 1], ld: 2}, {p: ['x', 1], li: 9}],
-          type.diff {x: [1, 2, 3]}, {x: [1, 9, 3]}
+        diffsTo {x: [1, 2, 3]}, {x: [1, 9, 3]},
+          [{p: ['x', 1], ld: 2}, {p: ['x', 1], li: 9}]
 
       it 'expresses a relocated element as lm', ->
-        assert.deepEqual [{p: ['x', 2], lm: 1}], type.diff {x: [0, 1, 2]}, {x: [0, 2, 1]}
+        diffsTo {x: [0, 1, 2]}, {x: [0, 2, 1]}, [{p: ['x', 2], lm: 1}]
 
       it 'expresses a moved run as one lm per element', ->
-        assert.deepEqual [{p: ['x', 2], lm: 0}, {p: ['x', 3], lm: 1}],
-          type.diff {x: [1, 2, 3, 4]}, {x: [3, 4, 1, 2]}
+        diffsTo {x: [1, 2, 3, 4]}, {x: [3, 4, 1, 2]},
+          [{p: ['x', 2], lm: 0}, {p: ['x', 3], lm: 1}]
 
       it 'moves the smaller side: one element to the far end, not the whole prefix', ->
-        assert.deepEqual [{p: ['x', 0], lm: 4}],
-          type.diff {x: [9, 1, 2, 3, 4]}, {x: [1, 2, 3, 4, 9]}
+        diffsTo {x: [9, 1, 2, 3, 4]}, {x: [1, 2, 3, 4, 9]}, [{p: ['x', 0], lm: 4}]
 
       it 'recurses into an object element changed in place rather than replacing it', ->
-        assert.deepEqual [{p: ['x', 1, 'v'], od: 1, oi: 2}],
-          type.diff {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {v: 2}]}
+        diffsTo {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {v: 2}]},
+          [{p: ['x', 1, 'v'], od: 1, oi: 2}]
 
       it 'recurses into a list element changed in place', ->
-        assert.deepEqual [{p: ['x', 0, 1], ld: 2}, {p: ['x', 0, 1], li: 9}],
-          type.diff {x: [[1, 2]]}, {x: [[1, 9]]}
+        diffsTo {x: [[1, 2]]}, {x: [[1, 9]]},
+          [{p: ['x', 0, 1], ld: 2}, {p: ['x', 0, 1], li: 9}]
 
       it 'replaces a changed primitive element with ld + li', ->
-        assert.deepEqual [{p: ['x', 1], ld: 2}, {p: ['x', 1], li: 9}],
-          type.diff {x: [1, 2, 3]}, {x: [1, 9, 3]}
+        diffsTo {x: [1, 2, 3]}, {x: [1, 9, 3]},
+          [{p: ['x', 1], ld: 2}, {p: ['x', 1], li: 9}]
 
       it 'replaces a whole element when its kind changes between object and list', ->
-        assert.deepEqual [{p: ['x', 0], ld: {a: 1}}, {p: ['x', 0], li: [2]}],
-          type.diff {x: [{a: 1}]}, {x: [[2]]}
+        diffsTo {x: [{a: 1}]}, {x: [[2]]},
+          [{p: ['x', 0], ld: {a: 1}}, {p: ['x', 0], li: [2]}]
 
       it 'replaces a batch of changed elements literally rather than pairing them', ->
-        assert.deepEqual [
+        diffsTo {x: [{v: 1}, {v: 2}]}, {x: [{v: 8}, {v: 9}]}, [
           {p: ['x', 0], ld: {v: 1}}, {p: ['x', 0], ld: {v: 2}}
           {p: ['x', 0], li: {v: 8}}, {p: ['x', 1], li: {v: 9}}
-        ], type.diff {x: [{v: 1}, {v: 2}]}, {x: [{v: 8}, {v: 9}]}
+        ]
 
     describe 'scalars and type changes', ->
       it 'diffs a changed non-string value with od + oi', ->
-        assert.deepEqual [{p: ['year'], od: 2020, oi: '2020'}], type.diff {year: 2020}, {year: '2020'}
+        diffsTo {year: 2020}, {year: '2020'}, [{p: ['year'], od: 2020, oi: '2020'}]
 
       it 'diffs a value changing between object and non-object with od + oi', ->
-        assert.deepEqual [{p: ['x'], od: 5, oi: {}}], type.diff {x: 5}, {x: {}}
-        assert.deepEqual [{p: ['x'], od: {}, oi: 5}], type.diff {x: {}}, {x: 5}
+        diffsTo {x: 5}, {x: {}}, [{p: ['x'], od: 5, oi: {}}]
+        diffsTo {x: {}}, {x: 5}, [{p: ['x'], od: {}, oi: 5}]
 
     it 'round-trips via apply', ->
       roundTrips {title: 'Original'}, {heading: 'PREFIX Original'}
