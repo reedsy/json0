@@ -459,6 +459,9 @@ genTests = (type) ->
         assert.deepEqual [{p: ['s'], od: 'foo', oi: undefined}], type.diff {s: 'foo'}, {s: undefined}
 
     describe 'lists', ->
+      it 'no-ops for equal empty lists', ->
+        diffsTo {x: []}, {x: []}, []
+
       it 'inserts appended elements with li', ->
         diffsTo {x: [1, 2]}, {x: [1, 2, 3]}, [{p: ['x', 2], li: 3}]
 
@@ -499,6 +502,35 @@ genTests = (type) ->
         diffsTo {x: [{a: 1}]}, {x: [[2]]},
           [{p: ['x', 0], ld: {a: 1}}, {p: ['x', 0], li: [2]}]
 
+      it 'inserts a new element before an unchanged tail with a single li', ->
+        diffsTo {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {b: 1}, {v: 1}]},
+          [{p: ['x', 1], li: {b: 1}}]
+
+      it 'inserts two new elements before an unchanged tail with one li each', ->
+        diffsTo {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {b: 1}, {c: 1}, {v: 1}]},
+          [{p: ['x', 1], li: {b: 1}}, {p: ['x', 2], li: {c: 1}}]
+
+      it 'removes an element before an unchanged tail with a single ld', ->
+        diffsTo {x: [{a: 1}, {b: 1}, {v: 1}]}, {x: [{a: 1}, {v: 1}]},
+          [{p: ['x', 1], ld: {b: 1}}]
+
+      # We only recurse into an element edited in place when the underlying array diff reports it as a
+      # lone remove-then-insert at one index. An insert or remove that shifts a neighbouring edit bundles
+      # the two into a multi-element remove/insert, which we can't split without guessing which old
+      # element each new one descends from - a guess that can pair unrelated elements and diff them into
+      # noise. So we leave these literal: a whole-element ld + li. Larger than ideal, but always correct
+      # (it round-trips), and never a misleading deep diff.
+      it 'replaces the whole element when an insertion shifts an adjacent edit', ->
+        diffsTo {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {b: 1}, {v: 2}]}, [
+          {p: ['x', 1], ld: {v: 1}}
+          {p: ['x', 1], li: {b: 1}}, {p: ['x', 2], li: {v: 2}}
+        ]
+      it 'replaces the whole element when a removal shifts an adjacent edit', ->
+        diffsTo {x: [{a: 1}, {b: 1}, {v: 1}]}, {x: [{a: 1}, {v: 2}]}, [
+          {p: ['x', 1], ld: {b: 1}}, {p: ['x', 1], ld: {v: 1}}
+          {p: ['x', 1], li: {v: 2}}
+        ]
+
       it 'replaces a batch of changed elements literally rather than pairing them', ->
         diffsTo {x: [{v: 1}, {v: 2}]}, {x: [{v: 8}, {v: 9}]}, [
           {p: ['x', 0], ld: {v: 1}}, {p: ['x', 0], ld: {v: 2}}
@@ -512,6 +544,9 @@ genTests = (type) ->
       it 'diffs a value changing between object and non-object with od + oi', ->
         diffsTo {x: 5}, {x: {}}, [{p: ['x'], od: 5, oi: {}}]
         diffsTo {x: {}}, {x: 5}, [{p: ['x'], od: {}, oi: 5}]
+
+      it 'replaces a value changing to null with od + oi', ->
+        diffsTo {x: {}}, {x: null}, [{p: ['x'], od: {}, oi: null}]
 
     it 'round-trips via apply', ->
       roundTrips {title: 'Original'}, {heading: 'PREFIX Original'}
