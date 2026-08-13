@@ -93,6 +93,44 @@ describe 'text0', ->
       test 'abc', 'ac'
       test 'ac', 'abc'
 
+      # multi-code-unit characters: surrogate pairs and combining sequences
+      test '😊a😊', '😊b😊'
+      test '😊a😊', '😊ac'
+      test '😊a', '☎️a'
+      test '😊', '☎️'
+      test '', '☎️'
+      test '😊', ''
+      test 'a\u030A', 'å' # combining ring vs precomposed - distinct code points
+
+      # whole-string and multi-edit changes
+      test 'existing', 'totally changed'
+      test 'this is something', 'these are something too'
+
+      # whitespace, including newline styles
+      test 'with\nnew line', 'without\tnew tab'
+      test 'with\nnew line', 'without new line'
+      test 'with\r\nwindows new line', 'without windows new line'
+      test 'with\r\nwindows new line', 'with\nlinux new line'
+      test ' a', 'a'
+      test ' a ', 'a'
+      test 'a ', 'a'
+      test 'a', ' a'
+      test 'a', ' a '
+      test 'a', 'a '
+
+      # A small edit into a huge string is O(n): the shared prefix and suffix are stripped first, so any
+      # realistic size round-trips in milliseconds.
+      test 'a'.repeat(10000000), 'a'.repeat(5000000) + 'X' + 'a'.repeat(5000000)
+
+    # Worst case: no common prefix or suffix and almost nothing in common, so the whole string falls to
+    # the underlying O(n*d) diff, which is ~O(n^2) here (edit distance grows with n). It still round-trips
+    # correctly, just slowly - this size takes ~1s, and it degrades quadratically, so multi-100k inputs of
+    # this shape are impractical. Real edits keep a large common prefix/suffix and avoid this entirely.
+    it 'round-trips a near-total rewrite of a large string, albeit slowly', ->
+      before = 'a'.repeat(10000)
+      after = 'b'.repeat(5000) + 'a' + 'b'.repeat(4999)
+      assert.strictEqual after, text0.apply(before, text0.diff(before, after))
+
   describe 'isOfType', ->
     it 'is sane', ->
       assert.strictEqual true, text0.isOfType ''
