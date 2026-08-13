@@ -548,6 +548,17 @@ genTests = (type) ->
       it 'replaces a value changing to null with od + oi', ->
         diffsTo {x: {}}, {x: null}, [{p: ['x'], od: {}, oi: null}]
 
+    describe 'document root', ->
+      it 'is a no-op for two null documents', ->
+        diffsTo null, null, []
+
+      it 'replaces the whole document with od + oi when a root swaps with null', ->
+        diffsTo null, {}, [{p: [], od: null, oi: {}}]
+        diffsTo {}, null, [{p: [], od: {}, oi: null}]
+
+      it 'replaces the whole document with od + oi when the root type changes', ->
+        diffsTo 1, 'a', [{p: [], od: 1, oi: 'a'}]
+
     it 'round-trips via apply', ->
       roundTrips {title: 'Original'}, {heading: 'PREFIX Original'}
       roundTrips {s: 'fooXbar'}, {s: 'fooYbar'}
