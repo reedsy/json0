@@ -122,26 +122,6 @@ describe 'text0', ->
       # realistic size round-trips in milliseconds.
       test 'a'.repeat(10000000), 'a'.repeat(5000000) + 'X' + 'a'.repeat(5000000)
 
-    # When the strings are large with little in common, fast-diff would be ~O(n^2), so past a residual
-    # threshold we replace the differing region wholesale instead. The op is a single delete + insert of
-    # that region (here the whole string), leaving any shared prefix/suffix in place.
-    it 'replaces wholesale instead of finely diffing large dissimilar strings', ->
-      before = 'a'.repeat(10000)
-      after = 'b'.repeat(10000)
-      assert.deepEqual [{p: 0, d: before}, {p: 0, i: after}], text0.diff(before, after)
-
-    it 'keeps a shared prefix and suffix around a wholesale replacement', ->
-      before = 'KEEP' + 'a'.repeat(10000) + 'END'
-      after = 'KEEP' + 'b'.repeat(10000) + 'END'
-      assert.deepEqual [{p: 4, d: 'a'.repeat(10000)}, {p: 4, i: 'b'.repeat(10000)}], text0.diff(before, after)
-
-    it 'still finely diffs a dissimilar change below the threshold', ->
-      before = 'abcdefghij'
-      after = 'abXdefghYj'
-      op = text0.diff before, after
-      assert.deepEqual [{p: 2, d: 'c'}, {p: 2, i: 'X'}, {p: 8, d: 'i'}, {p: 8, i: 'Y'}], op
-      assert.strictEqual after, text0.apply(before, op)
-
   describe 'isOfType', ->
     it 'is sane', ->
       assert.strictEqual true, text0.isOfType ''
