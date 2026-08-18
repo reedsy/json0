@@ -87,6 +87,9 @@ genTests = (type) ->
       it 'throws when the inserted content is not a string', ->
         assert.throws -> type.apply 'a', [{p: [0], si: 1}]
 
+      it 'throws when a string insert targets a non-existent field', ->
+        assert.throws -> type.apply {}, [{p: ['nope'], si: 'foo'}]
+
     describe '#transform()', ->
       it 'splits deletes', ->
         assert.deepEqual type.transform([{p:[0], sd:'ab'}], [{p:[1], si:'x'}], 'left'), [{p:[0], sd:'a'}, {p:[1], sd:'b'}]
@@ -383,6 +386,190 @@ genTests = (type) ->
       assert.deepEqual (li 3), xf (li 2), (lm 2, 1), 'left'
       assert.deepEqual (li 3), xf (li 3), (lm 2, 1), 'left'
 
+
+  describe '#diff()', ->
+    roundTrips = (before, after) ->
+      assert.deepEqual after, type.apply (JSON.parse JSON.stringify before), type.diff before, after
+
+    # Assert the exact op, then sense-check that applying it actually reproduces `after`.
+    # structuredClone (not JSON) so that explicit `undefined` values survive the round-trip.
+    diffsTo = (before, after, expected) ->
+      op = type.diff before, after
+      assert.deepEqual expected, op
+      assert.deepEqual after, type.apply (structuredClone before), op
+
+    before ->
+      type.registerSubtype
+        name: 'fake'
+        isOfType: (x) -> x?.mark is true
+        diff: (before, after) ->
+          if before.v is after.v then [] else [{fake: [before.v, after.v]}]
+        apply: (doc, op) ->
+          result = structuredClone doc
+          result.v = op[op.length - 1].fake[1]
+          result
+
+    it 'returns a no-op for equal values', ->
+      diffsTo {a: 1}, {a: 1}, []
+
+    describe 'objects', ->
+      it 'diffs an added key with oi', ->
+        diffsTo {a: 1}, {a: 1, b: 2}, [{p: ['b'], oi: 2}]
+
+      it 'diffs a removed key with od', ->
+        diffsTo {a: 1, b: 2}, {a: 1}, [{p: ['b'], od: 2}]
+
+      it 'diffs a renamed key with od + oi', ->
+        diffsTo {title: 'x'}, {heading: 'x'}, [{p: ['title'], od: 'x'}, {p: ['heading'], oi: 'x'}]
+
+      it 'diffs nested objects along their path', ->
+        diffsTo {a: {}}, {a: {b: 2}}, [{p: ['a', 'b'], oi: 2}]
+
+      it 'inserts a whole (nested) object for an added key rather than recursing', ->
+        diffsTo {}, {a: {b: 2}}, [{p: ['a'], oi: {b: 2}}]
+
+      it 'diffs only own keys, ignoring inherited enumerable properties', ->
+        before = Object.create {inherited: 'x'}
+        diffsTo {a: before}, {a: {b: 'new'}}, [{p: ['a', 'b'], oi: 'new'}]
+
+    describe 'subtypes', ->
+      it 'delegates to the owning subtype, wrapping its op at the path', ->
+        diffsTo {x: {mark: true, v: 1}}, {x: {mark: true, v: 2}},
+          [{p: ['x'], t: 'fake', o: [{fake: [1, 2]}]}]
+
+      it 'delegates to the subtype when a list element it owns is changed in place', ->
+        diffsTo {x: [{mark: true, v: 1}]}, {x: [{mark: true, v: 2}]},
+          [{p: ['x', 0], t: 'fake', o: [{fake: [1, 2]}]}]
+
+      it 'drops the component when the owning subtype produces an empty op', ->
+        # the subtype only diffs v, so an unrelated note change yields an empty op. No round-trip:
+        # by design the op intentionally doesn't reproduce the note change.
+        assert.deepEqual [],
+          type.diff {x: {mark: true, v: 1, note: 'a'}}, {x: {mark: true, v: 1, note: 'b'}}
+
+      it 'falls back to od/oi when only one side is owned by the subtype', ->
+        diffsTo {x: {mark: true, v: 1}}, {x: 5},
+          [{p: ['x'], od: {mark: true, v: 1}, oi: 5}]
+
+      it 'diffs an undefined side to a whole-value oi/od, never a subtype op', ->
+        # isOfType rejects undefined, so no subtype claims the pair and we replace the whole value.
+        # No round-trip assert here: an explicit-undefined value and an absent key aren't deep-equal,
+        # so applying the op (which deletes the key) can't reproduce the {s: undefined} input.
+        assert.deepEqual [{p: ['s'], od: undefined, oi: 'foo'}], type.diff {s: undefined}, {s: 'foo'}
+        assert.deepEqual [{p: ['s'], od: 'foo', oi: undefined}], type.diff {s: 'foo'}, {s: undefined}
+
+    describe 'lists', ->
+      it 'no-ops for equal empty lists', ->
+        diffsTo {x: []}, {x: []}, []
+
+      it 'inserts appended elements with li', ->
+        diffsTo {x: [1, 2]}, {x: [1, 2, 3]}, [{p: ['x', 2], li: 3}]
+
+      it 'removes dropped elements with ld', ->
+        diffsTo {x: [1, 2, 3]}, {x: [1, 3]}, [{p: ['x', 1], ld: 2}]
+
+      it 'removes a contiguous run with one ld per element at the shifting index', ->
+        diffsTo {x: [1, 2, 3, 4]}, {x: [1, 4]},
+          [{p: ['x', 1], ld: 2}, {p: ['x', 1], ld: 3}]
+
+      it 'leaves unchanged neighbours alone when an element is replaced', ->
+        diffsTo {x: [1, 2, 3]}, {x: [1, 9, 3]},
+          [{p: ['x', 1], ld: 2}, {p: ['x', 1], li: 9}]
+
+      it 'expresses a relocated element as lm', ->
+        diffsTo {x: [0, 1, 2]}, {x: [0, 2, 1]}, [{p: ['x', 2], lm: 1}]
+
+      it 'expresses a moved run as one lm per element', ->
+        diffsTo {x: [1, 2, 3, 4]}, {x: [3, 4, 1, 2]},
+          [{p: ['x', 2], lm: 0}, {p: ['x', 3], lm: 1}]
+
+      it 'moves the smaller side: one element to the far end, not the whole prefix', ->
+        diffsTo {x: [9, 1, 2, 3, 4]}, {x: [1, 2, 3, 4, 9]}, [{p: ['x', 0], lm: 4}]
+
+      it 'recurses into an object element changed in place rather than replacing it', ->
+        diffsTo {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {v: 2}]},
+          [{p: ['x', 1, 'v'], od: 1, oi: 2}]
+
+      it 'recurses into a list element changed in place', ->
+        diffsTo {x: [[1, 2]]}, {x: [[1, 9]]},
+          [{p: ['x', 0, 1], ld: 2}, {p: ['x', 0, 1], li: 9}]
+
+      it 'replaces a changed primitive element with ld + li', ->
+        diffsTo {x: [1, 2, 3]}, {x: [1, 9, 3]},
+          [{p: ['x', 1], ld: 2}, {p: ['x', 1], li: 9}]
+
+      it 'replaces a whole element when its kind changes between object and list', ->
+        diffsTo {x: [{a: 1}]}, {x: [[2]]},
+          [{p: ['x', 0], ld: {a: 1}}, {p: ['x', 0], li: [2]}]
+
+      it 'inserts a new element before an unchanged tail with a single li', ->
+        diffsTo {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {b: 1}, {v: 1}]},
+          [{p: ['x', 1], li: {b: 1}}]
+
+      it 'inserts two new elements before an unchanged tail with one li each', ->
+        diffsTo {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {b: 1}, {c: 1}, {v: 1}]},
+          [{p: ['x', 1], li: {b: 1}}, {p: ['x', 2], li: {c: 1}}]
+
+      it 'removes an element before an unchanged tail with a single ld', ->
+        diffsTo {x: [{a: 1}, {b: 1}, {v: 1}]}, {x: [{a: 1}, {v: 1}]},
+          [{p: ['x', 1], ld: {b: 1}}]
+
+      # We only recurse into an element edited in place when the underlying array diff reports it as a
+      # lone remove-then-insert at one index. An insert or remove that shifts a neighbouring edit bundles
+      # the two into a multi-element remove/insert, which we can't split without guessing which old
+      # element each new one descends from - a guess that can pair unrelated elements and diff them into
+      # noise. So we leave these literal: a whole-element ld + li. Larger than ideal, but always correct
+      # (it round-trips), and never a misleading deep diff.
+      it 'replaces the whole element when an insertion shifts an adjacent edit', ->
+        diffsTo {x: [{a: 1}, {v: 1}]}, {x: [{a: 1}, {b: 1}, {v: 2}]}, [
+          {p: ['x', 1], ld: {v: 1}}
+          {p: ['x', 1], li: {b: 1}}, {p: ['x', 2], li: {v: 2}}
+        ]
+      it 'replaces the whole element when a removal shifts an adjacent edit', ->
+        diffsTo {x: [{a: 1}, {b: 1}, {v: 1}]}, {x: [{a: 1}, {v: 2}]}, [
+          {p: ['x', 1], ld: {b: 1}}, {p: ['x', 1], ld: {v: 1}}
+          {p: ['x', 1], li: {v: 2}}
+        ]
+
+      it 'replaces a batch of changed elements literally rather than pairing them', ->
+        diffsTo {x: [{v: 1}, {v: 2}]}, {x: [{v: 8}, {v: 9}]}, [
+          {p: ['x', 0], ld: {v: 1}}, {p: ['x', 0], ld: {v: 2}}
+          {p: ['x', 0], li: {v: 8}}, {p: ['x', 1], li: {v: 9}}
+        ]
+
+    describe 'scalars and type changes', ->
+      it 'diffs a changed non-string value with od + oi', ->
+        diffsTo {year: 2020}, {year: '2020'}, [{p: ['year'], od: 2020, oi: '2020'}]
+
+      it 'diffs a value changing between object and non-object with od + oi', ->
+        diffsTo {x: 5}, {x: {}}, [{p: ['x'], od: 5, oi: {}}]
+        diffsTo {x: {}}, {x: 5}, [{p: ['x'], od: {}, oi: 5}]
+
+      it 'replaces a value changing to null with od + oi', ->
+        diffsTo {x: {}}, {x: null}, [{p: ['x'], od: {}, oi: null}]
+
+    describe 'document root', ->
+      it 'is a no-op for two null documents', ->
+        diffsTo null, null, []
+
+      it 'replaces the whole document with od + oi when a root swaps with null', ->
+        diffsTo null, {}, [{p: [], od: null, oi: {}}]
+        diffsTo {}, null, [{p: [], od: {}, oi: null}]
+
+      it 'replaces the whole document with od + oi when the root type changes', ->
+        diffsTo 1, 'a', [{p: [], od: 1, oi: 'a'}]
+
+    it 'round-trips via apply', ->
+      roundTrips {title: 'Original'}, {heading: 'PREFIX Original'}
+      roundTrips {s: 'fooXbar'}, {s: 'fooYbar'}
+      roundTrips {year: 2020, keep: true}, {year: '2020', keep: true}
+      roundTrips {a: {b: 'foo'}}, {a: {b: 'foobar'}}
+
+    it 'round-trips random array reshapes via apply', ->
+      # array of 0-7 elements with values 0-5 --> duplicates values are common to stress move/index logic
+      randomArray = -> (Math.floor(Math.random() * 6) for _ in [0...Math.floor(Math.random() * 8)])
+      for _ in [0...2000]
+        roundTrips {x: randomArray()}, {x: randomArray()}
 
   describe 'object', ->
     it 'passes sanity checks', ->

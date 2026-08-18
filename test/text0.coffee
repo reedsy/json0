@@ -71,6 +71,67 @@ describe 'text0', ->
       assert.strictEqual 100, text0.transformCursor 104, [{d:'asdf', p:100}]
       assert.strictEqual 101, text0.transformCursor 105, [{d:'asdf', p:100}]
 
+  describe 'diff', ->
+    it 'is sane', ->
+      assert.deepEqual [], text0.diff '', ''
+      assert.deepEqual [{i:'a', p:0}], text0.diff '', 'a'
+      assert.deepEqual [{d:'a', p:0}], text0.diff 'a', ''
+      assert.deepEqual [{i:'b', p:1}], text0.diff 'a', 'ab'
+      assert.deepEqual [{d:'b', p:1}], text0.diff 'ab', 'a'
+      assert.deepEqual [{d:'b', p:1}, {i:'c', p:1}], text0.diff 'ab', 'ac'
+
+    it 'round-trips via apply', ->
+      test = (before, after) ->
+        op = text0.diff before, after
+        assert.strictEqual after, text0.apply(before, op)
+      test '', ''
+      test '', 'a'
+      test 'a', ''
+      test 'a', 'ab'
+      test 'ab', 'a'
+      test 'ab', 'ac'
+      test 'abc', 'ac'
+      test 'ac', 'abc'
+
+      # multi-code-unit characters: surrogate pairs and combining sequences
+      test '😊a😊', '😊b😊'
+      test '😊a😊', '😊ac'
+      test '😊a', '☎️a'
+      test '😊', '☎️'
+      test '', '☎️'
+      test '😊', ''
+      test 'a\u030A', 'å' # combining ring vs precomposed - distinct code points
+
+      # whole-string and multi-edit changes
+      test 'existing', 'totally changed'
+      test 'this is something', 'these are something too'
+
+      # whitespace, including newline styles
+      test 'with\nnew line', 'without\tnew tab'
+      test 'with\nnew line', 'without new line'
+      test 'with\r\nwindows new line', 'without windows new line'
+      test 'with\r\nwindows new line', 'with\nlinux new line'
+      test ' a', 'a'
+      test ' a ', 'a'
+      test 'a ', 'a'
+      test 'a', ' a'
+      test 'a', ' a '
+      test 'a', 'a '
+
+      # A small edit into a huge string is O(n): the shared prefix and suffix are stripped first, so any
+      # realistic size round-trips in milliseconds.
+      test 'a'.repeat(10000000), 'a'.repeat(5000000) + 'X' + 'a'.repeat(5000000)
+
+  describe 'isOfType', ->
+    it 'is sane', ->
+      assert.strictEqual true, text0.isOfType ''
+      assert.strictEqual true, text0.isOfType 'abc'
+      assert.strictEqual false, text0.isOfType null
+      assert.strictEqual false, text0.isOfType undefined
+      assert.strictEqual false, text0.isOfType 123
+      assert.strictEqual false, text0.isOfType {}
+      assert.strictEqual false, text0.isOfType []
+
   describe 'normalize', ->
     it 'is sane', ->
       testUnchanged = (op) -> assert.deepEqual op, text0.normalize op
