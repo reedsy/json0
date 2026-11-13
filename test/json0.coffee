@@ -164,6 +164,17 @@ genTests = (type) ->
       it 'throws when specifying a string as a list move target', ->
         assert.throws -> type.apply ['a', 'b', 'c'], [{p: [1], lm: '0'}]
 
+      it 'throws when moving an item that does not exist', ->
+        assert.throws -> type.apply ['a', 'b', 'c'], [{p: [3], lm: 0}]
+        assert.throws -> type.apply ['a', 'b', 'c'], [{p: [-1], lm: 0}]
+        assert.throws -> type.apply ['a', 'b', 'c'], [{p: [0.5], lm: 0}]
+
+      it 'ignores a move onto its own index past the end of the list', ->
+        assert.deepEqual ['a', 'b', 'c'], type.apply ['a', 'b', 'c'], [{p: [3], lm: 3}]
+
+      it 'accepts a move target past the end of the list', ->
+        assert.deepEqual ['b', 'c', 'a'], type.apply ['a', 'b', 'c'], [{p: [0], lm: 3}]
+
       it 'throws when an array index part-way through the path is a string', ->
         assert.throws -> type.apply {arr:[{x:'a'}]}, [{p:['arr', '0', 'x'], od: 'a'}]
 
